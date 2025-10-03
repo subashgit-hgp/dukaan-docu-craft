@@ -1,16 +1,88 @@
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { InvoiceTemplate } from "@/components/InvoiceTemplate";
+import { generatePDF } from "@/lib/pdfGenerator";
+import { toast } from "@/hooks/use-toast";
 import logo from "@/assets/logo.png";
+
+interface OrderData {
+  id: string;
+  date: string;
+  customer: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  amount: number;
+  status: string;
+  itemTotal?: number;
+  discount?: number;
+  delivery?: number;
+  products?: Array<{ name: string; quantity: number; price: number }>;
+}
 
 const CustomerPortal = () => {
   const [orderId, setOrderId] = useState("");
+  const [foundOrder, setFoundOrder] = useState<OrderData | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleSearch = () => {
-    // TODO: Search for order in database
-    console.log("Searching for order:", orderId);
+    if (orderId === "21413494") {
+      const order: OrderData = {
+        id: "21413494",
+        date: "2025-09-25",
+        customer: "Subramanian RV",
+        email: "bindhufitnessone@gmail.com",
+        phone: "+91-908977378",
+        address: "17E Petals Apartment, Second Floor, BHEL Nagar, Medavakkam, Tamil Nadu - 600100",
+        amount: 440,
+        status: "Paid",
+        itemTotal: 370,
+        discount: 77.29,
+        delivery: 120,
+        products: [
+          { name: "Portulaca Plant Button Rose Baby Pink (MOG 002)", quantity: 1, price: 30 },
+          { name: "Kodi Sambangi Plant (Creeper)", quantity: 1, price: 80 },
+          { name: "Samanthi Plant - Yellow", quantity: 1, price: 70 },
+          { name: "Jasmine Plant (Jasminum)", quantity: 2, price: 95 },
+        ],
+      };
+      setFoundOrder(order);
+      toast({
+        title: "Order Found!",
+        description: `Invoice for order #${orderId} is ready to download.`,
+      });
+    } else {
+      setFoundOrder(null);
+      toast({
+        title: "Order Not Found",
+        description: "Please check your order ID and try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!foundOrder) return;
+    
+    setIsGenerating(true);
+    try {
+      await generatePDF("invoice-content", `Invoice-${foundOrder.id}.pdf`);
+      toast({
+        title: "Success!",
+        description: "Invoice downloaded successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -43,6 +115,19 @@ const CustomerPortal = () => {
               </div>
             </CardContent>
           </Card>
+
+          {foundOrder && (
+            <div className="mt-8">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">Your Invoice</h2>
+                <Button onClick={handleDownloadPDF} disabled={isGenerating} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  {isGenerating ? "Generating..." : "Download PDF"}
+                </Button>
+              </div>
+              <InvoiceTemplate order={foundOrder} />
+            </div>
+          )}
 
           <div className="mt-8 text-center text-sm text-muted-foreground">
             <p>Need help? Contact us at bindhufitnessone@gmail.com</p>
