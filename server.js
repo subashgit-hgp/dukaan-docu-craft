@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 10000; // Render uses port 10000
 
 app.use(bodyParser.json());
 
@@ -16,23 +16,24 @@ if (!fs.existsSync(invoicesDir)) {
 
 app.use('/invoices', express.static(invoicesDir));
 
+// Handle root path for health checks
+app.get('/', (req, res) => {
+  res.status(200).send('Server is alive and running!');
+});
+
 app.post('/webhook', (req, res) => {
   try {
     const order = req.body.order;
-
     if (!order) {
       console.error('Webhook received, but "order" object was missing.');
       return res.status(400).json({ success: false, message: 'Invalid payload.' });
     }
-
     console.log('Webhook received for order:', order.order_id);
-
     const filename = `invoice_${order.order_id}.pdf`;
     const filePath = path.join(invoicesDir, filename);
-
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(fs.createWriteStream(filePath));
-
+    // PDF content generation...
     doc.fontSize(20).text('MyOwnGarden® Invoice', { align: 'center' });
     doc.moveDown();
     doc.fontSize(12).text(`Order ID: ${order.order_id || 'N/A'}`);
@@ -43,7 +44,6 @@ app.post('/webhook', (req, res) => {
     doc.text(order.customer ? order.customer.address : 'N/A');
     doc.text(`Phone: ${order.customer ? order.customer.phone : 'N/A'}`);
     doc.moveDown();
-
     if (order.custom_fields) {
       doc.text('Additional Information:');
       for (const [key, value] of Object.entries(order.custom_fields)) {
@@ -51,9 +51,7 @@ app.post('/webhook', (req, res) => {
       }
       doc.moveDown();
     }
-
     doc.text('Order Summary:');
-    // THIS IS THE FIX: Check if order.products exists and is an array
     if (order.products && Array.isArray(order.products)) {
       order.products.forEach(p => {
         const price = p.price || 0;
@@ -64,30 +62,25 @@ app.post('/webhook', (req, res) => {
       doc.text('Product details not available in this payload.');
     }
     doc.moveDown();
-
     const grandTotal = order.amounts ? order.amounts.grand_total : 0;
     doc.fontSize(14).text(`Grand Total: ₹${grandTotal.toFixed(2)}`, { align: 'right' });
-    
     doc.end();
-
     res.status(200).json({ success: true, message: 'Invoice created successfully.' });
-
   } catch (error) {
     console.error('Failed to process webhook:', error);
     res.status(500).json({ success: false, message: 'Internal Server Error.' });
   }
 });
 
-// Add this block to handle requests to the homepage
-app.get('/', (req, res) => {
-  res.status(200).send('Server is alive and running!');
-});
-
-// This line should already be in your file at the end
-app.listen(port, () => {
+// ** THE FIX IS HERE **
+const server = app.listen(port, () => {
   console.log(`Server is listening on port ${port}`);
 });
 
-app.listen(port, () => {
-  console.log(`Server is listening on port ${port}`);
+// Handle shutdown signals to prevent EADDRINUSE error
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+  });
 });
