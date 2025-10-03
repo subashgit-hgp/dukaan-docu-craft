@@ -78,6 +78,16 @@ app.post('/webhook', (req, res) => {
   }
 });
 
+// Add this block to handle requests to the homepage
+app.get('/', (req, res) => {
+  res.status(200).send('Server is alive and running!');
+});
+
+// This line should already be in your file at the end
+app.listen(port, () => {
+  console.log(`Server is listening on port ${port}`);
+});
+
 app.listen(port, () => {
   console.log(`Server is listening on port ${port}`);
 });
