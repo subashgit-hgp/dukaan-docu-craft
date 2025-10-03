@@ -26,16 +26,14 @@ app.head('/', (req, res) => {
 
 app.post('/webhook', (req, res) => {
   try {
-    const fullWebhookBody = req.body;
-    const order = fullWebhookBody.order;
+    const order = req.body.order;
 
     if (!order) {
       console.error('Webhook received, but "order" object was missing.');
       return res.status(400).json({ success: false, message: 'Invalid payload.' });
     }
-
-    // Use 'id' from the top level, as it's the simple order number
-    const orderId = fullWebhookBody.id || order.id || order.uuid;
+    
+    const orderId = req.body.id || order.id || order.uuid;
     console.log('Webhook received for order:', orderId);
 
     const filename = `invoice_${orderId}.pdf`;
@@ -44,39 +42,88 @@ app.post('/webhook', (req, res) => {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(fs.createWriteStream(filePath));
 
+    // Register and use the custom font
+    doc.registerFont('NotoSans', 'NotoSans-Regular.ttf');
+    doc.font('NotoSans');
+
     // --- PDF Content Generation ---
-    doc.fontSize(20).text('MyOwnGarden® Invoice', { align: 'center' });
-    doc.moveDown();
 
-    doc.fontSize(12).text(`Order ID: ${orderId}`);
-    doc.text(`Order Date: ${order.created_at ? new Date(order.created_at).toLocaleDateString() : new Date().toLocaleDateString()}`);
-    doc.moveDown();
+    // Header
+    doc.fontSize(20).text('MyOwnGarden®', { align: 'left' });
+    doc.fontSize(10).text('4/467, BHEL Nagar, Medavakkam, Chennai, Tamil Nadu 600100, India');
+    doc.text('Contact: support@myowngarden.com');
+    doc.text('GSTIN - 33BPSPM1550F1ZX');
+    doc.moveDown(2);
 
-    doc.text('Bill To:');
+    // Order and Customer Details
+    const detailsTop = doc.y;
+    doc.fontSize(12).text('Order details', { underline: true });
+    doc.text(`Order ID: ${orderId}`);
+    doc.text(`Order Date: ${order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}`);
+    doc.text(`Payment: ${order.payment_gateway_names ? order.payment_gateway_names.join(', ') : 'N/A'}`);
+
     const customerName = order.shipping_address ? order.shipping_address.full_name : 'N/A';
-    const customerAddress = order.shipping_address ? `${order.shipping_address.address1}, ${order.shipping_address.city}, ${order.shipping_address.state} ${order.shipping_address.zip}` : 'N/A';
+    const customerAddress = order.shipping_address ? `${order.shipping_address.address1}, ${order.shipping_address.city}, ${order.shipping_address.state}, IN, ${order.shipping_address.zip}` : 'N/A';
     const customerPhone = order.shipping_address ? order.shipping_address.phone : 'N/A';
-    doc.text(customerName);
-    doc.text(customerAddress);
-    doc.text(`Phone: ${customerPhone}`);
-    doc.moveDown();
+    
+    doc.text('Customer details', 300, detailsTop, { underline: true });
+    doc.text(customerName, 300);
+    doc.text(customerAddress, 300, { width: 250 });
+    doc.text(`Mobile: ${customerPhone}`, 300);
+    doc.moveDown(3);
 
-    doc.text('Order Summary:');
-    // ** THE FIX IS HERE: Use order.line_items **
+    // Order Summary Table
+    doc.fontSize(14).text('Order summary');
+    doc.moveDown();
+    const tableTop = doc.y;
+    const itemX = 50;
+    const qtyX = 350;
+    const priceX = 420;
+    const amountX = 500;
+
+    doc.fontSize(10).font('NotoSans');
+    doc.text('Item', itemX, tableTop);
+    doc.text('Qty', qtyX, tableTop, { width: 50, align: 'center' });
+    doc.text('Price', priceX, tableTop, { width: 60, align: 'right' });
+    doc.text('Amount', amountX, tableTop, { width: 60, align: 'right' });
+    doc.moveTo(itemX, tableTop + 15).lineTo(560, tableTop + 15).stroke();
+
+    let i = 0;
     if (order.line_items && Array.isArray(order.line_items)) {
       order.line_items.forEach(item => {
+        const y = tableTop + 25 + (i * 25);
         const price = parseFloat(item.price) || 0;
         const quantity = item.quantity || 0;
-        doc.text(`${item.title || 'Unknown Product'} x ${quantity} = ₹${(price * quantity).toFixed(2)}`);
+        doc.text(item.title || 'Unknown Product', itemX, y, { width: 280 });
+        doc.text(quantity.toString(), qtyX, y, { width: 50, align: 'center' });
+        doc.text(`₹${price.toFixed(2)}`, priceX, y, { width: 60, align: 'right' });
+        doc.text(`₹${(price * quantity).toFixed(2)}`, amountX, y, { width: 60, align: 'right' });
+        i++;
       });
-    } else {
-      doc.text('Product details not available in this payload.');
     }
-    doc.moveDown();
+    doc.font('NotoSans').fontSize(12);
+    doc.y = tableTop + 25 + (i * 25);
+    doc.moveDown(2);
 
+    // Totals
+    const itemTotal = order.subtotal_price || 0;
     const grandTotal = order.total_price || 0;
-    doc.fontSize(14).text(`Grand Total: ₹${grandTotal.toFixed(2)}`, { align: 'right' });
+    const delivery = grandTotal - itemTotal; // Calculate delivery
+    
+    doc.text(`Item Total: ₹${itemTotal.toFixed(2)}`, { align: 'right' });
+    if (delivery > 0) {
+      doc.text(`Delivery: ₹${delivery.toFixed(2)}`, { align: 'right' });
+    }
+    doc.moveDown(0.5);
+    doc.fontSize(16).text(`Total: ₹${grandTotal.toFixed(2)}`, { align: 'right' });
+    doc.moveDown(3);
 
+    // Additional Details
+    if (order.note) {
+      doc.fontSize(12).text('Additional details:', { underline: true });
+      doc.fontSize(10).text(order.note);
+    }
+    
     doc.end();
 
     res.status(200).json({ success: true, message: 'Invoice created successfully.' });
