@@ -32,7 +32,7 @@ app.post('/webhook', (req, res) => {
       console.error('Webhook received, but "order" object was missing.');
       return res.status(400).json({ success: false, message: 'Invalid payload.' });
     }
-    
+
     const orderId = req.body.id || order.id || order.uuid;
     console.log('Webhook received for order:', orderId);
 
@@ -42,11 +42,8 @@ app.post('/webhook', (req, res) => {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(fs.createWriteStream(filePath));
 
-    // Register and use the custom font
     doc.registerFont('NotoSans', 'NotoSans-Regular.ttf');
     doc.font('NotoSans');
-
-    // --- PDF Content Generation ---
 
     // Header
     doc.fontSize(20).text('MyOwnGarden®', { align: 'left' });
@@ -65,7 +62,7 @@ app.post('/webhook', (req, res) => {
     const customerName = order.shipping_address ? order.shipping_address.full_name : 'N/A';
     const customerAddress = order.shipping_address ? `${order.shipping_address.address1}, ${order.shipping_address.city}, ${order.shipping_address.state}, IN, ${order.shipping_address.zip}` : 'N/A';
     const customerPhone = order.shipping_address ? order.shipping_address.phone : 'N/A';
-    
+
     doc.text('Customer details', 300, detailsTop, { underline: true });
     doc.text(customerName, 300);
     doc.text(customerAddress, 300, { width: 250 });
@@ -76,17 +73,12 @@ app.post('/webhook', (req, res) => {
     doc.fontSize(14).text('Order summary');
     doc.moveDown();
     const tableTop = doc.y;
-    const itemX = 50;
-    const qtyX = 350;
-    const priceX = 420;
-    const amountX = 500;
-
     doc.fontSize(10).font('NotoSans');
-    doc.text('Item', itemX, tableTop);
-    doc.text('Qty', qtyX, tableTop, { width: 50, align: 'center' });
-    doc.text('Price', priceX, tableTop, { width: 60, align: 'right' });
-    doc.text('Amount', amountX, tableTop, { width: 60, align: 'right' });
-    doc.moveTo(itemX, tableTop + 15).lineTo(560, tableTop + 15).stroke();
+    doc.text('Item', 50, tableTop);
+    doc.text('Qty', 350, tableTop, { width: 50, align: 'center' });
+    doc.text('Price', 420, tableTop, { width: 60, align: 'right' });
+    doc.text('Amount', 500, tableTop, { width: 60, align: 'right' });
+    doc.moveTo(50, tableTop + 15).lineTo(560, tableTop + 15).stroke();
 
     let i = 0;
     if (order.line_items && Array.isArray(order.line_items)) {
@@ -94,23 +86,23 @@ app.post('/webhook', (req, res) => {
         const y = tableTop + 25 + (i * 25);
         const price = parseFloat(item.price) || 0;
         const quantity = item.quantity || 0;
-        doc.text(item.title || 'Unknown Product', itemX, y, { width: 280 });
-        doc.text(quantity.toString(), qtyX, y, { width: 50, align: 'center' });
-        doc.text(`₹${price.toFixed(2)}`, priceX, y, { width: 60, align: 'right' });
-        doc.text(`₹${(price * quantity).toFixed(2)}`, amountX, y, { width: 60, align: 'right' });
+        doc.text(item.title || 'Unknown Product', 50, y, { width: 280 });
+        doc.text(quantity.toString(), 350, y, { width: 50, align: 'center' });
+        doc.text(`₹${price.toFixed(2)}`, 420, y, { width: 60, align: 'right' });
+        doc.text(`₹${(price * quantity).toFixed(2)}`, 500, y, { width: 60, align: 'right' });
         i++;
       });
     }
-    doc.font('NotoSans').fontSize(12);
     doc.y = tableTop + 25 + (i * 25);
     doc.moveDown(2);
 
-    // Totals
+    // ** THE FIX IS HERE **
+    // Added fallback values of 0 to prevent NaN errors
     const itemTotal = order.subtotal_price || 0;
     const grandTotal = order.total_price || 0;
-    const delivery = grandTotal - itemTotal; // Calculate delivery
-    
-    doc.text(`Item Total: ₹${itemTotal.toFixed(2)}`, { align: 'right' });
+    const delivery = Math.max(0, grandTotal - itemTotal); // Ensure delivery is not negative
+
+    doc.fontSize(12).text(`Item Total: ₹${itemTotal.toFixed(2)}`, { align: 'right' });
     if (delivery > 0) {
       doc.text(`Delivery: ₹${delivery.toFixed(2)}`, { align: 'right' });
     }
@@ -123,7 +115,7 @@ app.post('/webhook', (req, res) => {
       doc.fontSize(12).text('Additional details:', { underline: true });
       doc.fontSize(10).text(order.note);
     }
-    
+
     doc.end();
 
     res.status(200).json({ success: true, message: 'Invoice created successfully.' });
