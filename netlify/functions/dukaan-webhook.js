@@ -1,5 +1,4 @@
 // netlify/functions/dukaan-webhook.js
-const { Netlify } = require("@netlify/sdk");
 
 exports.handler = async function(event, context) {
   if (event.httpMethod !== "POST") {
@@ -7,9 +6,10 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    const order = JSON.parse(event.body);
+    // Use dynamic import() to load the ES Module
+    const { Netlify } = await import("@netlify/sdk");
 
-    // This requires the @netlify/sdk package
+    const order = JSON.parse(event.body);
     const netlify = new Netlify({ apiToken: context.netlify.apiToken });
 
     const orderToInsert = {
@@ -25,8 +25,8 @@ exports.handler = async function(event, context) {
       products: order.products,
       custom_fields: order.custom_fields
     };
-
-    // Insert the data into your 'orders' table in the Netlify Database
+    
+    // Insert data into the 'orders' table
     await netlify.db.from('orders').insert(orderToInsert);
 
     console.log(`Successfully saved order: ${order.order_id}`);
@@ -37,7 +37,7 @@ exports.handler = async function(event, context) {
     };
 
   } catch (err) {
-    console.error("Webhook processing error:", err);
+    console.error("Webhook processing error:", err.message);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: `Error processing webhook: ${err.message}` })
