@@ -18,13 +18,11 @@ app.use('/invoices', express.static(invoicesDir));
 
 app.post('/webhook', (req, res) => {
   try {
-    // THE FIX IS HERE: Get the data from inside the "order" object
     const order = req.body.order;
 
-    // A check to make sure the order object exists
     if (!order) {
-      console.error('Webhook received, but "order" object was missing in the body.');
-      return res.status(400).json({ success: false, message: 'Invalid payload received from Dukaan.' });
+      console.error('Webhook received, but "order" object was missing.');
+      return res.status(400).json({ success: false, message: 'Invalid payload.' });
     }
 
     console.log('Webhook received for order:', order.order_id);
@@ -37,13 +35,13 @@ app.post('/webhook', (req, res) => {
 
     doc.fontSize(20).text('MyOwnGarden® Invoice', { align: 'center' });
     doc.moveDown();
-    doc.fontSize(12).text(`Order ID: ${order.order_id}`);
-    doc.text(`Order Date: ${new Date(order.order_date).toLocaleDateString()}`);
+    doc.fontSize(12).text(`Order ID: ${order.order_id || 'N/A'}`);
+    doc.text(`Order Date: ${order.order_date ? new Date(order.order_date).toLocaleDateString() : new Date().toLocaleDateString()}`);
     doc.moveDown();
     doc.text('Bill To:');
-    doc.text(order.customer.name);
-    doc.text(order.customer.address);
-    doc.text(`Phone: ${order.customer.phone}`);
+    doc.text(order.customer ? order.customer.name : 'N/A');
+    doc.text(order.customer ? order.customer.address : 'N/A');
+    doc.text(`Phone: ${order.customer ? order.customer.phone : 'N/A'}`);
     doc.moveDown();
 
     if (order.custom_fields) {
@@ -55,11 +53,20 @@ app.post('/webhook', (req, res) => {
     }
 
     doc.text('Order Summary:');
-    order.products.forEach(p => {
-      doc.text(`${p.name} x ${p.quantity} = ₹${(p.price * p.quantity).toFixed(2)}`);
-    });
+    // THIS IS THE FIX: Check if order.products exists and is an array
+    if (order.products && Array.isArray(order.products)) {
+      order.products.forEach(p => {
+        const price = p.price || 0;
+        const quantity = p.quantity || 0;
+        doc.text(`${p.name || 'Unknown Product'} x ${quantity} = ₹${(price * quantity).toFixed(2)}`);
+      });
+    } else {
+      doc.text('Product details not available in this payload.');
+    }
     doc.moveDown();
-    doc.fontSize(14).text(`Grand Total: ₹${order.amounts.grand_total.toFixed(2)}`, { align: 'right' });
+
+    const grandTotal = order.amounts ? order.amounts.grand_total : 0;
+    doc.fontSize(14).text(`Grand Total: ₹${grandTotal.toFixed(2)}`, { align: 'right' });
     
     doc.end();
 
