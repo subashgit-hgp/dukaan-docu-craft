@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const port = process.env.PORT || 10000; // Render uses port 10000
+const port = process.env.PORT || 10000;
 
 app.use(bodyParser.json());
 
@@ -16,9 +16,15 @@ if (!fs.existsSync(invoicesDir)) {
 
 app.use('/invoices', express.static(invoicesDir));
 
-// Handle root path for health checks
+// Respond to GET requests (from a browser)
 app.get('/', (req, res) => {
   res.status(200).send('Server is alive and running!');
+});
+
+// **THIS IS THE FIX**
+// Respond to HEAD requests (from UptimeRobot)
+app.head('/', (req, res) => {
+  res.status(200).end();
 });
 
 app.post('/webhook', (req, res) => {
@@ -33,7 +39,7 @@ app.post('/webhook', (req, res) => {
     const filePath = path.join(invoicesDir, filename);
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(fs.createWriteStream(filePath));
-    // PDF content generation...
+    // ... (rest of your PDF generation code)
     doc.fontSize(20).text('MyOwnGarden® Invoice', { align: 'center' });
     doc.moveDown();
     doc.fontSize(12).text(`Order ID: ${order.order_id || 'N/A'}`);
@@ -72,12 +78,10 @@ app.post('/webhook', (req, res) => {
   }
 });
 
-// ** THE FIX IS HERE **
 const server = app.listen(port, () => {
   console.log(`Server is listening on port ${port}`);
 });
 
-// Handle shutdown signals to prevent EADDRINUSE error
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
   server.close(() => {
