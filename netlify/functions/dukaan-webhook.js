@@ -1,17 +1,16 @@
 // netlify/functions/dukaan-webhook.js
+import { Netlify } from "@netlify/sdk";
 
-exports.handler = async function(event, context) {
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
+export default async (req, context) => {
+  // Handle non-POST requests
+  if (req.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405 });
   }
 
   try {
-    // Use dynamic import() to load the ES Module
-    const { Netlify } = await import("@netlify/sdk");
-
-    const order = JSON.parse(event.body);
-    const netlify = new Netlify({ apiToken: context.netlify.apiToken });
-
+    const order = await req.json();
+    const netlify = new Netlify(context.netlify.apiToken);
+    
     const orderToInsert = {
       order_id: order.order_id,
       order_date: order.order_date,
@@ -23,24 +22,29 @@ exports.handler = async function(event, context) {
       status: order.status,
       grand_total: order.amounts.grand_total,
       products: order.products,
-      custom_fields: order.custom_fields
+      custom_fields: order.custom_fields 
     };
     
-    // Insert data into the 'orders' table
+    // Insert data into the 'orders' table in your Netlify Database
     await netlify.db.from('orders').insert(orderToInsert);
 
     console.log(`Successfully saved order: ${order.order_id}`);
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Webhook received and order successfully saved." })
-    };
+    return new Response(
+      JSON.stringify({ message: "Webhook received and order successfully saved." }),
+      { status: 200 }
+    );
 
   } catch (err) {
     console.error("Webhook processing error:", err.message);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: `Error processing webhook: ${err.message}` })
-    };
+    return new Response(
+      JSON.stringify({ error: `Error processing webhook: ${err.message}` }),
+      { status: 500 }
+    );
   }
+};
+
+// This ensures the function is available at the correct URL
+export const config = {
+  path: "/.netlify/functions/dukaan-webhook"
 };
