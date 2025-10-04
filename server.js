@@ -32,7 +32,7 @@ app.post('/webhook', (req, res) => {
       console.error('Webhook received, but "order" object was missing.');
       return res.status(400).json({ success: false, message: 'Invalid payload.' });
     }
-
+    
     const orderId = req.body.id || order.id || order.uuid;
     console.log('Webhook received for order:', orderId);
 
@@ -41,7 +41,7 @@ app.post('/webhook', (req, res) => {
 
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(fs.createWriteStream(filePath));
-
+    
     doc.registerFont('NotoSans', 'NotoSans-Regular.ttf');
     doc.font('NotoSans');
 
@@ -62,7 +62,7 @@ app.post('/webhook', (req, res) => {
     const customerName = order.shipping_address ? order.shipping_address.full_name : 'N/A';
     const customerAddress = order.shipping_address ? `${order.shipping_address.address1}, ${order.shipping_address.city}, ${order.shipping_address.state}, IN, ${order.shipping_address.zip}` : 'N/A';
     const customerPhone = order.shipping_address ? order.shipping_address.phone : 'N/A';
-
+    
     doc.text('Customer details', 300, detailsTop, { underline: true });
     doc.text(customerName, 300);
     doc.text(customerAddress, 300, { width: 250 });
@@ -95,13 +95,12 @@ app.post('/webhook', (req, res) => {
     }
     doc.y = tableTop + 25 + (i * 25);
     doc.moveDown(2);
-
-    // ** THE FIX IS HERE **
-    // Added fallback values of 0 to prevent NaN errors
+    
+    // Fallback values of 0 prevent NaN errors
     const itemTotal = order.subtotal_price || 0;
     const grandTotal = order.total_price || 0;
-    const delivery = Math.max(0, grandTotal - itemTotal); // Ensure delivery is not negative
-
+    const delivery = Math.max(0, grandTotal - itemTotal);
+    
     doc.fontSize(12).text(`Item Total: ₹${itemTotal.toFixed(2)}`, { align: 'right' });
     if (delivery > 0) {
       doc.text(`Delivery: ₹${delivery.toFixed(2)}`, { align: 'right' });
@@ -110,14 +109,12 @@ app.post('/webhook', (req, res) => {
     doc.fontSize(16).text(`Total: ₹${grandTotal.toFixed(2)}`, { align: 'right' });
     doc.moveDown(3);
 
-    // Additional Details
     if (order.note) {
       doc.fontSize(12).text('Additional details:', { underline: true });
       doc.fontSize(10).text(order.note);
     }
-
+    
     doc.end();
-
     res.status(200).json({ success: true, message: 'Invoice created successfully.' });
 
   } catch (error) {
