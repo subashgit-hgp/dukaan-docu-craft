@@ -96,7 +96,6 @@ app.post('/webhook', (req, res) => {
     doc.y = tableTop + 25 + (i * 25);
     doc.moveDown(2);
     
-    // Fallback values of 0 prevent NaN errors
     const itemTotal = order.subtotal_price || 0;
     const grandTotal = order.total_price || 0;
     const delivery = Math.max(0, grandTotal - itemTotal);
