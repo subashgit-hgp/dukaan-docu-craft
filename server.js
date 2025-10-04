@@ -96,8 +96,9 @@ app.post('/webhook', (req, res) => {
     doc.y = tableTop + 25 + (i * 25);
     doc.moveDown(2);
     
-    const itemTotal = order.subtotal_price || 0;
-    const grandTotal = order.total_price || 0;
+    // **THE FIX IS HERE: Safer parsing for numbers**
+    const itemTotal = parseFloat(order.subtotal_price) || 0;
+    const grandTotal = parseFloat(order.total_price) || 0;
     const delivery = Math.max(0, grandTotal - itemTotal);
     
     doc.fontSize(12).text(`Item Total: ₹${itemTotal.toFixed(2)}`, { align: 'right' });
